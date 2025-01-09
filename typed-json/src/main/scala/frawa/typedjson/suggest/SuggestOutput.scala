@@ -41,25 +41,19 @@ object SuggestOutput:
     private val bops = summon[OutputOps[SimpleOutput]]
     private val isAt = (pointer: Pointer) => at == pointer
 
-    // TODO avoid cheating via local mutation
-    import scala.collection.mutable
-    private val keywordsAt = mutable.ArrayBuffer.empty[Keyword]
-
     def valid(pointer: Pointer): SuggestOutput =
-      SuggestOutput(bops.valid(pointer), keywordsAt.toSeq.distinct)
+      SuggestOutput(bops.valid(pointer))
 
     def invalid(error: ValidationError, pointer: Pointer): SuggestOutput =
-      SuggestOutput(bops.invalid(error, pointer), keywordsAt.toSeq.distinct)
+      SuggestOutput(bops.invalid(error, pointer))
 
     def all(
         os: Seq[SuggestOutput],
-        error: Option[ValidationError],
         pointer: Pointer
     ): SuggestOutput =
       SuggestOutput(
-        bops.all(os.map(_.simple), error, pointer),
-        // os.flatMap(_.keywords)
-        keywordsAt.toSeq.distinct
+        bops.all(os.map(_.simple), pointer),
+        os.flatMap(_.keywords)
       )
 
     extension (o: SuggestOutput)
@@ -75,15 +69,15 @@ object SuggestOutput:
               // TODO avoid restoring WithLocation
               k match {
                 case _: WithLocation =>
-                  keywordsAt.addOne(k)
-                  // o.copy(keywords = o.keywords :+ k)
-                  o
+                  o.copy(keywords = o.keywords :+ k)
                 case _ =>
                   val k_ = WithLocation(k, kl)
-                  keywordsAt.addOne(k_)
-                  o
-                // o.copy(keywords = o.keywords :+ k_)
+                  o.copy(keywords = o.keywords :+ k_)
               }
             }
             .getOrElse(o)
         else o
+      def withError(error: ValidationError): SuggestOutput =
+        o.copy(simple = o.simple.withError(error))
+      def isAggregating(os: Seq[SuggestOutput]): SuggestOutput =
+        o.copy(keywords = os.flatMap(_.keywords))

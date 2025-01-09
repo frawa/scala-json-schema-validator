@@ -45,7 +45,7 @@ object SimpleOutput:
     def invalid(error: ValidationError, pointer: Pointer): SimpleOutput =
       SimpleOutput(false, Seq(WithPointer(error, pointer)), pointer)
 
-    def all(os: Seq[SimpleOutput], error: Option[ValidationError], pointer: Pointer): SimpleOutput =
+    def all(os: Seq[SimpleOutput], pointer: Pointer): SimpleOutput =
       val valid = os.forall(_.valid)
       val annotations =
         if valid then
@@ -53,7 +53,7 @@ object SimpleOutput:
         else Seq()
       SimpleOutput(
         valid,
-        error.map(WithPointer(_, pointer)).toSeq ++ os.flatMap(_.errors),
+        os.flatMap(_.errors),
         pointer,
         annotations
       )
@@ -72,3 +72,7 @@ object SimpleOutput:
         o.copy(annotations = o.annotations ++ annotations)
       def getAnnotations(): Seq[Annotation]                                        = o.annotations
       def forKeyword(kl: KeywordLocation, k: Option[Keyword] = None): SimpleOutput = o
+      def withError(error: ValidationError): SimpleOutput =
+        o.copy(errors = WithPointer(error, o.pointer) +: o.errors)
+      def isAggregating(os: Seq[SimpleOutput]): SimpleOutput =
+        o

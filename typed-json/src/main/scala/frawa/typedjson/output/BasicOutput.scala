@@ -49,7 +49,7 @@ object BasicOutput:
     def invalid(error: ValidationError, pointer: Pointer): BasicOutput =
       BasicOutput(false, error = Some(error), instanceLocation = pointer)
 
-    def all(os: Seq[BasicOutput], error: Option[ValidationError], pointer: Pointer): BasicOutput =
+    def all(os: Seq[BasicOutput], pointer: Pointer): BasicOutput =
       val valid = os.forall(_.valid)
       val annotations =
         if valid then
@@ -69,7 +69,7 @@ object BasicOutput:
               )
             self +: o.errors
           }
-      if errors.size == 1 && error.isEmpty then
+      if errors.size == 1 then
         // TODO realy?
         BasicOutput(
           valid,
@@ -82,7 +82,6 @@ object BasicOutput:
         BasicOutput(
           valid,
           annotations,
-          error = error.filterNot(_ => valid),
           errors = errors,
           instanceLocation = pointer
         )
@@ -102,3 +101,7 @@ object BasicOutput:
           // new RuntimeException().printStackTrace()
           o
         else o.copy(keywordLocation = Some(kl))
+      def withError(error: ValidationError): BasicOutput =
+        o.copy(error = Some(error))
+      def isAggregating(os: Seq[BasicOutput]): BasicOutput =
+        o
