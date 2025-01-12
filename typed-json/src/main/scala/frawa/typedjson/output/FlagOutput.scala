@@ -37,7 +37,7 @@ object FlagOutput:
     def valid(pointer: Pointer): FlagOutput                           = FlagOutput(true, pointer)
     def invalid(error: ValidationError, pointer: Pointer): FlagOutput = FlagOutput(false, pointer)
 
-    def all(os: Seq[FlagOutput], error: Option[ValidationError], pointer: Pointer): FlagOutput =
+    def all(os: Seq[FlagOutput], pointer: Pointer): FlagOutput =
       FlagOutput(
         os.forall(_.valid),
         pointer,
@@ -51,3 +51,5 @@ object FlagOutput:
         o.copy(annotations = o.annotations ++ annotations)
       def getAnnotations(): Seq[Annotation]                                      = o.annotations
       def forKeyword(kl: KeywordLocation, k: Option[Keyword] = None): FlagOutput = o
+      def withError(error: ValidationError): FlagOutput                          = o
+      def isAggregating(os: Seq[FlagOutput]): FlagOutput                         = o

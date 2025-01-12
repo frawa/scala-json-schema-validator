@@ -56,13 +56,13 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
 
   private def funAll(fs: Seq[Fun[R[O]]]): Fun[R[O]] = value =>
     val ros = fs.map(f => f(value))
-    FP.sequence(ros).map(os => ops.all(os, None, value.pointer))
+    FP.sequence(ros).map(os => ops.all(os, value.pointer))
 
   private def funMap[A, B](fun: Fun[R[A]])(f: (A, Pointer) => B): Fun[R[B]] =
     value => fun(value).map(a => f(a, value.pointer))
 
   private def verifyAllOf(os: Seq[O], pointer: Pointer): O =
-    ops.all(os, None, pointer)
+    ops.all(os, pointer)
 
   private def verifyNot(o: O, pointer: Pointer): O =
     o.not(pointer)
@@ -70,15 +70,15 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
   private def verifyOneOf(os: Seq[O], pointer: Pointer): O =
     val count       = os.count(_.isValid)
     val annotations = OutputOps.mergeAnnotations(os.filter(_.isValid).flatMap(_.getAnnotations()))
-    if count == 1 then ops.valid(pointer).withAnnotations(annotations)
-    else if count == 0 then ops.all(os, None, pointer) // TODO new error NoneOf?
-    else ops.invalid(NotOneOf(count), pointer)
+    if count == 1 then ops.valid(pointer).withAnnotations(annotations).isAggregating(os)
+    else if count == 0 then ops.all(os, pointer) // TODO new error NoneOf?
+    else ops.invalid(NotOneOf(count), pointer).isAggregating(os)
 
   private def verifyAnyOf(os: Seq[O], pointer: Pointer): O =
     val valid       = os.exists(_.isValid)
     val annotations = OutputOps.mergeAnnotations(os.filter(_.isValid).flatMap(_.getAnnotations()))
-    if valid then ops.valid(pointer).withAnnotations(annotations)
-    else ops.all(os, None, pointer) // TODO new error NoneOf?
+    if valid then ops.valid(pointer).withAnnotations(annotations).isAggregating(os)
+    else ops.all(os, pointer) // TODO new error NoneOf?
 
   private def verifyNumberValue(
       error: => ValidationError
@@ -180,8 +180,9 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
       }
       .map { ros =>
         FP.sequence(ros).map { os =>
-          val o = ops.all(os, None, value.pointer)
-          if o.isValid then o.withAnnotation(EvaluatedIndices(Seq.range(0, os.size).toSet))
+          val o = ops.all(os, value.pointer)
+          if o.isValid then
+            o.withAnnotation(EvaluatedIndices(Seq.range(0, os.size).toSet)).isAggregating(os)
           else o
         }
       }
@@ -222,7 +223,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
               .map(_._2)
               .toSet
             val os = osWithProp.map(_._1)
-            val o  = ops.all(os, None, value.pointer)
+            val o  = ops.all(os, value.pointer)
             if o.isValid then o.withAnnotation(EvaluatedProperties(validProperties))
             else o
           )
@@ -255,19 +256,25 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
                 funThen
                   .map(_(value))
                   .map(roThen =>
-                    roThen.map { oThen => ops.all(Seq(condition, oThen), None, value.pointer) }
+                    roThen.map { oThen => ops.all(Seq(condition, oThen), value.pointer) }
                   )
               else
                 funElse
                   .map(_(value))
                   .map(roElse =>
                     roElse.map { oElse =>
-                      ops.all(Seq(condition.not(value.pointer), oElse), None, value.pointer)
+                      ops.all(Seq(condition.not(value.pointer), oElse), value.pointer)
                     }
                   )
-            thenOrElse.getOrElse(
-              monad.unit(ops.valid(value.pointer).withAnnotations(condition.getAnnotations()))
-            )
+            thenOrElse.getOrElse {
+              val os = Seq()
+              monad.unit(
+                ops
+                  .valid(value.pointer)
+                  .withAnnotations(condition.getAnnotations())
+                  .isAggregating(os)
+              )
+            }
           }
         }
         .getOrElse(monad.unit(ops.valid(value.pointer)))
@@ -319,7 +326,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
         }.toSeq
         // val validNames = os.filter(_._2.isValid).map(_._1).toSet
         // TODO annotation EvaluatedProperties() with validNames
-        FP.sequence(ros.map(_._2)).map(os => ops.all(os, None, value.pointer))
+        FP.sequence(ros.map(_._2)).map(os => ops.all(os, value.pointer))
       }
       .getOrElse(monad.unit(ops.valid(value.pointer)))
 
@@ -405,7 +412,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
         val required = vs.keySet.flatMap(schemas.get)
         required.map(_(value)).toSeq
       }
-      .map(ros => FP.sequence(ros).map(os => ops.all(os, None, value.pointer)))
+      .map(ros => FP.sequence(ros).map(os => ops.all(os, value.pointer)))
       .getOrElse(monad.unit(ops.valid(value.pointer)))
 
   def verifyContains(
@@ -473,7 +480,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
             val rosRemaining = remainingIndexed.map(unevaluated)
             val ros1         = ros ++ rosRemaining
             FP.sequence(ros1)
-              .map(os => ops.all(os, None, value.pointer))
+              .map(os => ops.all(os, value.pointer))
               .map { o =>
                 if o.isValid then o.withAnnotation(EvaluatedIndices(all))
                 else o
@@ -481,7 +488,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
           }
         ro1
       }
-      .getOrElse(FP.sequence(ros).map(os => ops.all(os, None, value.pointer)))
+      .getOrElse(FP.sequence(ros).map(os => ops.all(os, value.pointer)))
 
   def verifyUnevaluatedProperties(
       pushed: Seq[Fun[R[O]]],
@@ -520,7 +527,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
             val rosRemaining = remainingValued.map(unevaluated)
             val ros1         = ros ++ rosRemaining
             FP.sequence(ros1)
-              .map(os => ops.all(os, None, value.pointer))
+              .map(os => ops.all(os, value.pointer))
               .map { o =>
                 if o.isValid then o.withAnnotation(EvaluatedProperties(all))
                 else o
@@ -528,7 +535,7 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
           }
         ro1
       }
-      .getOrElse(FP.sequence(ros).map(os => ops.all(os, None, value.pointer)))
+      .getOrElse(FP.sequence(ros).map(os => ops.all(os, value.pointer)))
 
   def verifyIgnored(keyword: String): Fun[R[O]] =
     funUnit(value => ops.valid(value.pointer).withAnnotation(Ignored(Set(keyword))))
@@ -537,9 +544,10 @@ class Verify[R[_], O](using TheResultMonad[R, O], OutputOps[O]):
     fun(value).map { o =>
       if o.isValid then o
       else
-        ops.all(
-          Seq(o),
-          Some(AdditionalPropertyInvalid(value.pointer.targetField.getOrElse("?"))),
-          value.pointer
-        )
+        ops
+          .all(
+            Seq(o),
+            value.pointer
+          )
+          .withError(AdditionalPropertyInvalid(value.pointer.targetField.getOrElse("?")))
     }
